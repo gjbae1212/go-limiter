@@ -6,8 +6,8 @@
 </p>
 
 **Go-Limiter** is a rate limiter which can throttle up and back requests in a specified situation.  
-**Go-Limiter*** can apply to a custom function that revaluates a current limit of the requests in a specified situation but doesn't get out between min and max limit that you set. 
-Revaluate time happens periodically; of course, it supports a custom interval that you set.    
+**Go-Limiter*** can apply to a custom function that revaluates a current limit of the requests in a specified situation but doesn't get out between min and max limit that you set.   
+Revaluate time happens periodically; of course, it supports a custom interval that you set.      
 It's based on memory or redis. If you use it in distributed applications, recommend redis.
 
 ## Getting Started
