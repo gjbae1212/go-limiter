@@ -2,6 +2,7 @@ package limiter
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v7"
@@ -14,13 +15,14 @@ type Cache interface {
 	Get(key string) (interface{}, bool, error)
 	MGet(keys ...string) ([]interface{}, bool, error)
 	Set(key string, value interface{}, ttl time.Duration) error
+	Increment(key string, n int64, ttl time.Duration) error
 	Ping(ctx context.Context) bool
 	Close() error
 }
 
 // RedisCache is Cache struct based on Redis.
 type RedisCache struct {
-	*redis.Client
+	client *redis.Client
 }
 
 // RedisCache_Get gets item using key.
@@ -29,7 +31,7 @@ func (rc *RedisCache) Get(key string) (interface{}, bool, error) {
 		return nil, false, nil
 	}
 
-	result, err := rc.Client.Get(key).Result()
+	result, err := rc.client.Get(key).Result()
 	if err == redis.Nil {
 		return nil, false, nil
 	} else if err != nil {
@@ -44,7 +46,7 @@ func (rc *RedisCache) MGet(keys ...string) ([]interface{}, bool, error) {
 		return []interface{}{}, false, nil
 	}
 
-	result, err := rc.Client.MGet(keys...).Result()
+	result, err := rc.client.MGet(keys...).Result()
 	if err == redis.Nil {
 		return []interface{}{}, false, nil
 	} else if err != nil {
@@ -59,8 +61,29 @@ func (rc *RedisCache) Set(key string, value interface{}, ttl time.Duration) erro
 		return ErrInvalidParams
 	}
 
-	_, err := rc.Client.Set(key, value, ttl).Result()
+	_, err := rc.client.Set(key, value, ttl).Result()
 	return err
+}
+
+// RedisCache_Increment increases a value from key.
+func (rc *RedisCache) Increment(key string, n int64, ttl time.Duration) error {
+	if key == "" || n <= 0 {
+		return ErrInvalidParams
+	}
+
+	// start redis pipeline.
+	pipe := rc.client.Pipeline()
+	pipe.IncrBy(key, n)
+	if ttl > 0 {
+		pipe.Expire(key, ttl)
+	}
+
+	// end redis pipeline.
+	if _, err := pipe.Exec(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // RedisCache_Ping does a server health check.
@@ -71,7 +94,7 @@ func (rc *RedisCache) Ping(ctx context.Context) bool {
 
 	ret := make(chan bool)
 	go func() {
-		if _, err := rc.Client.Ping().Result(); err != nil {
+		if _, err := rc.client.Ping().Result(); err != nil {
 			ret <- false
 		} else {
 			ret <- true
@@ -88,12 +111,13 @@ func (rc *RedisCache) Ping(ctx context.Context) bool {
 
 // RedisCache_Close closes redis connection.
 func (rc *RedisCache) Close() error {
-	return rc.Client.Close()
+	return rc.client.Close()
 }
 
 // RedisCache is Cache struct based on Memory.
 type MemoryCache struct {
-	*cache.Cache
+	client *cache.Cache
+	lock   sync.RWMutex
 }
 
 // MemoryCache_Get gets item using key.
@@ -102,7 +126,7 @@ func (mc *MemoryCache) Get(key string) (interface{}, bool, error) {
 		return nil, false, nil
 	}
 
-	v, b := mc.Cache.Get(key)
+	v, b := mc.client.Get(key)
 	return v, b, nil
 }
 
@@ -114,7 +138,7 @@ func (mc *MemoryCache) MGet(keys ...string) ([]interface{}, bool, error) {
 
 	var ret []interface{}
 	for _, key := range keys {
-		v, _ := mc.Cache.Get(key)
+		v, _ := mc.client.Get(key)
 		ret = append(ret, v)
 	}
 	return ret, true, nil
@@ -125,8 +149,26 @@ func (mc *MemoryCache) Set(key string, value interface{}, ttl time.Duration) err
 	if key == "" || value == nil {
 		return ErrInvalidParams
 	}
-	mc.Cache.Set(key, value, ttl)
+	mc.client.Set(key, value, ttl)
 	return nil
+}
+
+// RedisCache_Increment increases a value from key.
+func (mc *MemoryCache) Increment(key string, n int64, ttl time.Duration) error {
+	if key == "" || n <= 0 {
+		return ErrInvalidParams
+	}
+	mc.lock.Lock()
+	defer mc.lock.Unlock()
+
+	// if key limit doesn't exist, make key in cache.
+	_, ok := mc.client.Get(key)
+	if !ok {
+		mc.client.Set(key, n, ttl)
+		return nil
+	}
+
+	return mc.client.Increment(key, n)
 }
 
 // MemoryCache_Ping does a server health check.
@@ -135,7 +177,7 @@ func (mc *MemoryCache) Ping(ctx context.Context) bool {
 		return false
 	}
 
-	if mc.Cache != nil {
+	if mc.client != nil {
 		return true
 	}
 	return false
@@ -143,7 +185,7 @@ func (mc *MemoryCache) Ping(ctx context.Context) bool {
 
 // MemoryCache_Close closes memory cache.
 func (mc *MemoryCache) Close() error {
-	mc.Cache.Flush()
+	mc.client.Flush()
 	return nil
 }
 
@@ -160,6 +202,6 @@ func NewRedisCache(cli *redis.Client) (Cache, error) {
 // NewMemoryCache returns cache for memory.
 func NewMemoryCache() (Cache, error) {
 	c := cache.New(cache.NoExpiration, 5*time.Minute)
-	mc := &MemoryCache{c}
+	mc := &MemoryCache{client: c}
 	return mc, nil
 }

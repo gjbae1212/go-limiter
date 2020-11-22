@@ -3,6 +3,7 @@ package limiter
 import (
 	"context"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
@@ -122,40 +123,6 @@ func TestMemoryCache_MGet(t *testing.T) {
 	}
 }
 
-func TestMemoryCache_Close(t *testing.T) {
-	assert := assert.New(t)
-
-	mc, err := NewMemoryCache()
-	assert.NoError(err)
-
-	tests := map[string]struct {
-		isErr bool
-	}{
-		"success": {},
-	}
-
-	for _, t := range tests {
-		assert.Equal(t.isErr, mc.Close() != nil)
-	}
-}
-
-func TestMemoryCache_Ping(t *testing.T) {
-	assert := assert.New(t)
-
-	mc, err := NewMemoryCache()
-	assert.NoError(err)
-
-	tests := map[string]struct {
-		live bool
-	}{
-		"success": {live: true},
-	}
-
-	for _, t := range tests {
-		assert.Equal(t.live, mc.Ping(context.Background()))
-	}
-}
-
 func TestMemoryCache_Set(t *testing.T) {
 	assert := assert.New(t)
 
@@ -179,11 +146,73 @@ func TestMemoryCache_Set(t *testing.T) {
 	}
 }
 
-func TestRedisCache_Get(t *testing.T) {
+func TestMemoryCache_Increment(t *testing.T) {
 	assert := assert.New(t)
 
-	client := redis.NewClient(&redis.Options{Addr: mockRedis.Addr()})
+	tests := map[string]struct {
+		key   string
+		n     int64
+		ttl   time.Duration
+		isErr bool
+	}{
+		"fail":    {isErr: true},
+		"success": {key: "allan", n: 10},
+	}
 
+	for _, t := range tests {
+		mc, err := NewMemoryCache()
+		assert.NoError(err)
+
+		err = mc.Increment(t.key, t.n, t.ttl)
+		assert.Equal(t.isErr, err != nil)
+		if err == nil {
+			result, ok, err := mc.Get(t.key)
+			assert.NoError(err)
+			assert.True(ok)
+			assert.Equal(t.n, result.(int64))
+		}
+	}
+}
+
+func TestMemoryCache_Ping(t *testing.T) {
+	assert := assert.New(t)
+
+	mc, err := NewMemoryCache()
+	assert.NoError(err)
+
+	tests := map[string]struct {
+		live bool
+	}{
+		"success": {live: true},
+	}
+
+	for _, t := range tests {
+		assert.Equal(t.live, mc.Ping(context.Background()))
+	}
+}
+
+func TestMemoryCache_Close(t *testing.T) {
+	assert := assert.New(t)
+
+	mc, err := NewMemoryCache()
+	assert.NoError(err)
+
+	tests := map[string]struct {
+		isErr bool
+	}{
+		"success": {},
+	}
+
+	for _, t := range tests {
+		assert.Equal(t.isErr, mc.Close() != nil)
+	}
+}
+
+func TestRedisCache_Get(t *testing.T) {
+	assert := assert.New(t)
+	mockRedis.FlushAll()
+
+	client := redis.NewClient(&redis.Options{Addr: mockRedis.Addr()})
 	rc, err := NewRedisCache(client)
 	assert.NoError(err)
 	rc.Set("get", 1, 1*time.Hour)
@@ -212,9 +241,9 @@ func TestRedisCache_Get(t *testing.T) {
 
 func TestRedisCache_MGet(t *testing.T) {
 	assert := assert.New(t)
+	mockRedis.FlushAll()
 
 	client := redis.NewClient(&redis.Options{Addr: mockRedis.Addr()})
-
 	rc, err := NewRedisCache(client)
 	assert.NoError(err)
 	rc.Set("mget-1", 1, 1*time.Hour)
@@ -242,50 +271,11 @@ func TestRedisCache_MGet(t *testing.T) {
 	}
 }
 
-func TestRedisCache_Close(t *testing.T) {
-	assert := assert.New(t)
-
-	client := redis.NewClient(&redis.Options{Addr: mockRedis.Addr()})
-
-	rc, err := NewRedisCache(client)
-	assert.NoError(err)
-
-	tests := map[string]struct {
-		isErr bool
-	}{
-		"success": {},
-	}
-
-	for _, t := range tests {
-		assert.Equal(t.isErr, rc.Close() != nil)
-	}
-
-}
-
-func TestRedisCache_Ping(t *testing.T) {
-	assert := assert.New(t)
-
-	client := redis.NewClient(&redis.Options{Addr: mockRedis.Addr()})
-
-	rc, err := NewRedisCache(client)
-	assert.NoError(err)
-
-	tests := map[string]struct {
-		live bool
-	}{
-		"success": {live: true},
-	}
-
-	for _, t := range tests {
-		assert.Equal(t.live, rc.Ping(context.Background()))
-	}
-}
-
 func TestRedisCache_Set(t *testing.T) {
 	assert := assert.New(t)
+	mockRedis.FlushAll()
 
 	client := redis.NewClient(&redis.Options{Addr: mockRedis.Addr()})
-
 	rc, err := NewRedisCache(client)
 	assert.NoError(err)
 
@@ -303,4 +293,74 @@ func TestRedisCache_Set(t *testing.T) {
 		err := rc.Set(t.key, t.value, t.ttl)
 		assert.Equal(t.isErr, err != nil)
 	}
+}
+
+func TestRedisCache_Ping(t *testing.T) {
+	assert := assert.New(t)
+	mockRedis.FlushAll()
+
+	client := redis.NewClient(&redis.Options{Addr: mockRedis.Addr()})
+	rc, err := NewRedisCache(client)
+	assert.NoError(err)
+
+	tests := map[string]struct {
+		live bool
+	}{
+		"success": {live: true},
+	}
+
+	for _, t := range tests {
+		assert.Equal(t.live, rc.Ping(context.Background()))
+	}
+}
+
+func TestRedisCache_Increment(t *testing.T) {
+	assert := assert.New(t)
+	mockRedis.FlushAll()
+
+	client := redis.NewClient(&redis.Options{Addr: mockRedis.Addr()})
+	rc, err := NewRedisCache(client)
+	assert.NoError(err)
+
+	tests := map[string]struct {
+		key   string
+		n     int64
+		ttl   time.Duration
+		isErr bool
+	}{
+		"fail":    {isErr: true},
+		"success": {key: "allan", n: 10},
+	}
+
+	for _, t := range tests {
+		err = rc.Increment(t.key, t.n, t.ttl)
+		assert.Equal(t.isErr, err != nil)
+		if err == nil {
+			result, ok, err := rc.Get(t.key)
+			assert.NoError(err)
+			assert.True(ok)
+			assert.Equal(strconv.Itoa(int(t.n)), result)
+		}
+	}
+
+}
+
+func TestRedisCache_Close(t *testing.T) {
+	assert := assert.New(t)
+	mockRedis.FlushAll()
+
+	client := redis.NewClient(&redis.Options{Addr: mockRedis.Addr()})
+	rc, err := NewRedisCache(client)
+	assert.NoError(err)
+
+	tests := map[string]struct {
+		isErr bool
+	}{
+		"success": {},
+	}
+
+	for _, t := range tests {
+		assert.Equal(t.isErr, rc.Close() != nil)
+	}
+
 }
