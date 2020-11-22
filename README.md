@@ -1,15 +1,13 @@
 # go-limiter
 
-<p align="center">
+<p align="left">
 <a href="https://hits.seeyoufarm.com"><img src="https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fgithub.com%2Fgjbae1212%2Fgo-limiter&count_bg=%2379C83D&title_bg=%23555555&icon=go.svg&icon_color=%2308BEB8&title=hits&edge_flat=false"/></a>
 <a href="/LICENSE"><img src="https://img.shields.io/badge/license-MIT-GREEN.svg" alt="license"/></a>
 </p>
 
-Go-Limiter is a rate limiter which can throttle up and back requests in a specified situation.  
-Go-Limiter can apply to a custom function that revaluates a current limit of the requests in a specified situation but doesn't get out between min and max limit that you set. 
-
+**Go-Limiter** is a rate limiter which can throttle up and back requests in a specified situation.  
+**Go-Limiter*** can apply to a custom function that revaluates a current limit of the requests in a specified situation but doesn't get out between min and max limit that you set. 
 Revaluate time happens periodically; of course, it supports a custom interval that you set.    
-
 It's based on memory or redis. If you use it in distributed applications, recommend redis.
 
 ## Getting Started
