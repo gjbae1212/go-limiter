@@ -256,7 +256,7 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 
-	mockMemory = mockMemoryCache.(*MemoryCache).client
+	mockMemory = mockMemoryCache.(*memoryCache).client
 
 	mockMemoryLimiter, err = NewRateLimiter("test-memory", mockMemoryCache,
 		WithMinLimit(100),
